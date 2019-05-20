@@ -1,0 +1,102 @@
+#' Compute the cumulative incidence
+#'
+#' @param estbetas Fitted flexsurv object as returned by \link{estimate_flexparams}
+#' @param timet The time at which the cumulative incidence is to be computed
+#' @param datain data frame containing all variables in the model
+#'
+#' @export
+
+cumincfun <- function(estbetas, timet, datain) {
+
+    pred.form <- update(estbetas$formula, NULL ~ .)
+    datamat <- model.matrix(pred.form, datain)
+
+    apply(datamat, MAR = 1, FUN = function(x) {
+
+        obj <- function(s){
+            haz <- hsurvspline(s, estbetas$optim$par[1:length(estbetas$knots)],
+                               beta = estbetas$optim$par[-c(1:length(estbetas$knots))],
+                               X = x,
+                               knots = estbetas$knots)
+            cumhaz <- Hsurvspline(s, estbetas$optim$par[1:length(estbetas$knots)],
+                                  beta = estbetas$optim$par[-c(1:length(estbetas$knots))],
+                                  X = x,
+                                  knots = estbetas$knots)
+            haz * exp(-cumhaz)
+        }
+
+        integrate(obj, lower = 0, upper = timet)$value
+
+    })
+
+}
+
+#' G compute the cumulative incidence function
+#'
+#' assuming S(1), W are jointly normal
+#' sample from W | S(1), estimate CI, then average over the Ws
+#' at values of S(1) that are observed in the vaccine arm
+#'
+#' @param dataou1 Augmented data as returned by \link{augment_data}
+#' @param fittedmod Parameter estimates as returned by \link{estimate_flexparams}
+#' @param timet numeric time at which cumulative incidence is computed
+#' @param treatment.var string denoting the name of the treatment variable
+#' @param surrogate.var string denoting the name of the surrogate variable
+#' @param nn number of values to sample for each observed S.1
+#'
+#' @return A data frame with the variables that go into the model, the estimated cumulative
+#' incidence and an indicator for the group to average over
+#'
+#'
+#' @export
+
+
+gcompute_cuminc <- function(dataou1, fittedmod, timet, treatment.var, surrogate.var, nn = 100) {
+
+    w.vars <- setdiff(all.vars(update(fittedmod$formula, NULL ~ .)), c(treatment.var, surrogate.var))
+
+    normdat <- dataou1$data1[, c(surrogate.var, w.vars)]
+    mu.norm <- sapply(normdat, mean)
+    Sigma.norm <- cov(normdat)
+
+    at.S <- normdat[, surrogate.var]
+
+    ## sample W | S(1) for each S(1) in at.S
+    w1.dex <- c(1:ncol(normdat))[-1]
+    mu.cond <- t(sapply(at.S, function(ss) mu.norm[w1.dex] + Sigma.norm[w1.dex, 1] * (ss - mu.norm[1]) / (Sigma.norm[1, 1])))
+    Sig.cond <- Sigma.norm[w1.dex, w1.dex] - Sigma.norm[w1.dex, 1] %*% solve(Sigma.norm[1, 1]) %*% Sigma.norm[1, w1.dex]
+
+    W.samp <- do.call(rbind, lapply(1:nrow(mu.cond), function(x){
+        dubus <- as.data.frame(rmvnorm(nn, mean = mu.cond[x, ], sigma = Sig.cond))
+        dubus[[surrogate.var]] <- at.S[x]
+        dubus[[treatment.var]] <- rep(c(0, 1), nn / 2)
+        dubus$group <- x
+        dubus
+    }))
+
+    stand.X <- model.matrix(update(fittedmod$formula, NULL ~ .), W.samp)
+    cuminces <- apply(stand.X, MAR = 1, FUN = function(x) {
+
+        obj <- function(s){
+            haz <- hsurvspline(s, fittedmod$optim$par[1:length(fittedmod$knots)],
+                               beta = fittedmod$optim$par[-c(1:length(fittedmod$knots))],
+                               X = x,
+                               knots = fittedmod$knots)
+            cumhaz <- Hsurvspline(s, fittedmod$optim$par[1:length(fittedmod$knots)],
+                                  beta = fittedmod$optim$par[-c(1:length(fittedmod$knots))],
+                                  X = x,
+                                  knots = fittedmod$knots)
+            haz * exp(-cumhaz)
+        }
+
+        integrate(obj, lower = 0, upper = timet)$value
+
+    })
+
+    ## average by group and treatment
+
+    W.samp$cuminc <- cuminces
+    W.samp
+
+
+}

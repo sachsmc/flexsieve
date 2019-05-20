@@ -1,0 +1,18 @@
+Package: flexsieve
+Type: Package
+Title: Sieve Analysis Using Flexible Parametric Survival Models
+Version: 0.1.0
+Author: Erin E Gabriel and Michael C Sachs
+Maintainer: Michael C Sachs <sachsmc@gmail.com>
+Description: More about what it does (maybe more than one line)
+    Use four spaces when indenting paragraphs within the Description.
+License: MIT+file license
+Encoding: UTF-8
+LazyData: true
+Depends:
+    survival,
+    flexsurv,
+    mvtnorm
+Suggests: 
+    testthat
+RoxygenNote: 6.1.1
