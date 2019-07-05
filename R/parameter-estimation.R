@@ -23,7 +23,7 @@ augment_data<-function(data1, missingind, ID.var, formula.predict, Nout){
     modout<-summary(predfit)
 
     datamid<-datamid[order(datamid[[ID.var]]),]
-    SQhatmat<- c(model.matrix(formula.predict, data = datamid) %*% modout$coefficients[,1, drop = FALSE])
+    SQhatmat<- c(model.matrix(update(formula.predict, NULL ~ .), data = datamid) %*% modout$coefficients[,1, drop = FALSE])
     s1mat<-unlist(lapply(SQhatmat,function(x){rnorm(Nout,x,modout$sigma)}))
     bigdataout<-datamid
     for(i in 1:(Nout-1)){
@@ -57,9 +57,12 @@ estimate_flexparams <- function(datain, ID.var, form ,K, ...){
     IDout <- data2[[ID.var]]
 
     lhood2 <- flexsurvspline.likelihood(form, data = data2, k = K) ## function of parameters
-
     lhood1 <- flexsurvspline.likelihood(form, data = data1, k = K) ## function of parameters
-    sfit <- flexsurvspline(form, data = rbind(data1, data2), k = K)
+
+    nparm <- ncol(model.matrix(form, data1)) - 1 + (K + 2)
+
+    sfit <- tryCatch(flexsurvspline(form, data = rbind(data1, data2), k = K),
+                     error = function(e) list(coefficients = rep(0.01, nparm)))
     start <- sfit$coefficients
 
     lilwyan<-function(beta1){
@@ -77,9 +80,12 @@ estimate_flexparams <- function(datain, ID.var, form ,K, ...){
 
     optimout1<-optim(beta0,lilwyan, ...)
 
+    sfit$res[, 1] <- sfit$coefficients <- optimout1$par
+
     retlist <- list(optim = optimout1,
                     knots = sfit$knots,
-                    formula = update(form, ~ . -1))
+                    formula = update(form, ~ . -1),
+                    flexobj = sfit)
     return(retlist)
 
 }

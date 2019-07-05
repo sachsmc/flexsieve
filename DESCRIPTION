@@ -4,15 +4,27 @@ Title: Sieve Analysis Using Flexible Parametric Survival Models
 Version: 0.1.0
 Author: Erin E Gabriel and Michael C Sachs
 Maintainer: Michael C Sachs <sachsmc@gmail.com>
-Description: More about what it does (maybe more than one line)
-    Use four spaces when indenting paragraphs within the Description.
+Description: A unified framework for simultaneously assessing CoP and sieve effects of a vaccine in 
+    a large Phase III randomized trial. We use flexible parametric models treating times to infection from 
+    different agents as competing risks and estimated maximum likelihood to fit the models. The parametric 
+    models under competing risks allow for estimation of both cumulative incidence based contrasts, and 
+    instantaneous rates. We outline the assumptions with which we can link the estimands to the causal 
+    contrasts of interest, propose hypothesis testing procedures, and evaluate our proposed methods 
+    in an extensive simulation study. 
 License: MIT+file license
 Encoding: UTF-8
 LazyData: true
 Depends:
     survival,
     flexsurv,
-    mvtnorm
+    mvtnorm,
+    mstate
 Suggests: 
-    testthat
+    testthat, 
+    parallel,
+    data.table,
+    ggplot2,
+    patchwork,
+    quantreg,
+    mgcv
 RoxygenNote: 6.1.1

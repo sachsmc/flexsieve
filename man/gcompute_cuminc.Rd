@@ -4,13 +4,11 @@
 \alias{gcompute_cuminc}
 \title{G compute the cumulative incidence function}
 \usage{
-gcompute_cuminc(dataou1, fittedmod, timet, treatment.var, surrogate.var,
+gcompute_cuminc(dataou1, fittedmods, timet, treatment.var, surrogate.var,
   nn = 100)
 }
 \arguments{
 \item{dataou1}{Augmented data as returned by \link{augment_data}}
-
-\item{fittedmod}{Parameter estimates as returned by \link{estimate_flexparams}}
 
 \item{timet}{numeric time at which cumulative incidence is computed}
 
@@ -19,6 +17,8 @@ gcompute_cuminc(dataou1, fittedmod, timet, treatment.var, surrogate.var,
 \item{surrogate.var}{string denoting the name of the surrogate variable}
 
 \item{nn}{number of values to sample for each observed S.1}
+
+\item{fittedmod}{Parameter estimates as returned by \link{estimate_flexparams}}
 }
 \value{
 A data frame with the variables that go into the model, the estimated cumulative

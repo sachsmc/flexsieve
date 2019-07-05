@@ -51,11 +51,11 @@ cumincfun <- function(estbetas, timet, datain) {
 #' @export
 
 
-gcompute_cuminc <- function(dataou1, fittedmod, timet, treatment.var, surrogate.var, nn = 100) {
+gcompute_cuminc <- function(dataou1, fittedmods, timet, treatment.var, surrogate.var, nn = 100) {
 
-    w.vars <- setdiff(all.vars(update(fittedmod$formula, NULL ~ .)), c(treatment.var, surrogate.var))
+    w.vars <- setdiff(all.vars(update(fittedmods[[1]]$formula, NULL ~ .)), c(treatment.var, surrogate.var))
 
-    normdat <- dataou1$data1[, c(surrogate.var, w.vars)]
+    normdat <- rbind(dataou1[[1]]$data1[, c(surrogate.var, w.vars)], dataou1[[2]]$data1[, c(surrogate.var, w.vars)])
     mu.norm <- sapply(normdat, mean)
     Sigma.norm <- cov(normdat)
 
@@ -68,34 +68,79 @@ gcompute_cuminc <- function(dataou1, fittedmod, timet, treatment.var, surrogate.
 
     W.samp <- do.call(rbind, lapply(1:nrow(mu.cond), function(x){
         dubus <- as.data.frame(rmvnorm(nn, mean = mu.cond[x, ], sigma = Sig.cond))
+        dubus <- rbind(dubus, dubus)
         dubus[[surrogate.var]] <- at.S[x]
-        dubus[[treatment.var]] <- rep(c(0, 1), nn / 2)
+        dubus[[treatment.var]] <- rep(c(0, 1), each = nn)
         dubus$group <- x
         dubus
     }))
 
-    stand.X <- model.matrix(update(fittedmod$formula, NULL ~ .), W.samp)
-    cuminces <- apply(stand.X, MAR = 1, FUN = function(x) {
-
+    stand.X <- model.matrix(update(fittedmods[[1]]$formula, NULL ~ .), W.samp)
+    nknot <- length(fittedmods[[1]]$knots)
+    nknot2 <- length(fittedmods[[2]]$knots)
+    CI.cause1 <- function(i) {
         obj <- function(s){
-            haz <- hsurvspline(s, fittedmod$optim$par[1:length(fittedmod$knots)],
-                               beta = fittedmod$optim$par[-c(1:length(fittedmod$knots))],
-                               X = x,
-                               knots = fittedmod$knots)
-            cumhaz <- Hsurvspline(s, fittedmod$optim$par[1:length(fittedmod$knots)],
-                                  beta = fittedmod$optim$par[-c(1:length(fittedmod$knots))],
-                                  X = x,
-                                  knots = fittedmod$knots)
-            haz * exp(-cumhaz)
+            cumhaz1 <- Hsurvspline(s, fittedmods[[1]]$optim$par[1:nknot],
+                                   beta = fittedmods[[1]]$optim$par[-c(1:nknot)],
+                                   X = stand.X[i, , drop = FALSE],
+                                   knots = fittedmods[[1]]$knots)
+
+            cumhaz2 <- Hsurvspline(s, fittedmods[[2]]$optim$par[1:nknot2],
+                                   beta = fittedmods[[2]]$optim$par[-c(1:nknot2)],
+                                   X = stand.X[i, , drop = FALSE],
+                                   knots = fittedmods[[2]]$knots)
+
+            haz1 <- hsurvspline(s, fittedmods[[1]]$optim$par[1:nknot],
+                                beta = fittedmods[[1]]$optim$par[-c(1:nknot)],
+                                X = stand.X[i, , drop = FALSE],
+                                knots = fittedmods[[1]]$knots)
+
+            (exp(-(cumhaz1 + cumhaz2)) * haz1)
         }
 
-        integrate(obj, lower = 0, upper = timet)$value
+        obj2 <- function(s){
+            cumhaz1 <- Hsurvspline(s, fittedmods[[1]]$optim$par[1:nknot],
+                                   beta = fittedmods[[1]]$optim$par[-c(1:nknot)],
+                                   X = stand.X[i, , drop = FALSE],
+                                   knots = fittedmods[[1]]$knots)
 
-    })
+            cumhaz2 <- Hsurvspline(s, fittedmods[[2]]$optim$par[1:nknot2],
+                                   beta = fittedmods[[2]]$optim$par[-c(1:nknot2)],
+                                   X = stand.X[i, , drop = FALSE],
+                                   knots = fittedmods[[2]]$knots)
 
-    ## average by group and treatment
+            haz2 <- hsurvspline(s, fittedmods[[2]]$optim$par[1:nknot2],
+                                beta = fittedmods[[2]]$optim$par[-c(1:nknot2)],
+                                X = stand.X[i, , drop = FALSE],
+                                knots = fittedmods[[2]]$knots)
 
-    W.samp$cuminc <- cuminces
+            (exp(-(cumhaz1 + cumhaz2)) * haz2)
+        }
+
+        obj3 <- function(s){
+            cumhaz1 <- Hsurvspline(s, fittedmods[[1]]$optim$par[1:nknot],
+                                   beta = fittedmods[[1]]$optim$par[-c(1:nknot)],
+                                   X = stand.X[i, , drop = FALSE],
+                                   knots = fittedmods[[1]]$knots)
+
+            cumhaz2 <- Hsurvspline(s, fittedmods[[2]]$optim$par[1:nknot2],
+                                   beta = fittedmods[[2]]$optim$par[-c(1:nknot2)],
+                                   X = stand.X[i, , drop = FALSE],
+                                   knots = fittedmods[[2]]$knots)
+
+            (exp(-(cumhaz1 + cumhaz2)))
+        }
+
+        c(integrate(obj, lower = 0, upper = timet)$value,
+          integrate(obj2, lower = 0, upper = timet)$value,
+          obj3(timet))
+
+    }
+
+    cuminces <- sapply(1:nrow(stand.X), CI.cause1)
+    W.samp$cuminc.cause1 <- cuminces[1, ]
+    W.samp$cuminc.cause2 <- cuminces[2, ]
+    W.samp$surv.overall <- cuminces[3, ]
     W.samp
 
 

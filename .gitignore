@@ -2,3 +2,6 @@
 .Rhistory
 .RData
 .Ruserdata
+dataraw/
+tests/*.Rdata
+*.db
